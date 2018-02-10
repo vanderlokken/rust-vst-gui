@@ -1,0 +1,29 @@
+[package]
+name = "vst-gui"
+version = "0.1.0"
+authors = ["Alexander Agafonov <vanderlokken@gmail.com>"]
+description = "An extension to the 'rust-vst' crate to create VST plugin GUIs"
+license = "MIT"
+keywords = ["gui", "plugin", "vst", "vst2"]
+
+[dependencies]
+vst = "0.0.1"
+
+[target.'cfg(windows)'.dependencies]
+memoffset = "0.2.1"
+
+[target.'cfg(windows)'.dependencies.winapi]
+version = "0.3.4"
+features = [
+    "combaseapi",
+    "libloaderapi",
+    "oaidl",
+    "oleauto",
+    "winbase",
+    "winerror",
+    "winuser"
+]
+
+[[example]]
+name = "synth"
+crate-type = ["cdylib"]
