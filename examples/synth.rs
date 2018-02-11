@@ -39,6 +39,9 @@ const HTML: &'static str = r#"
             var waveformRange = document.getElementById("waveformRange");
             var frequencyRange = document.getElementById("frequencyRange");
 
+            waveformRange.value = external.invoke("getWaveform");
+            frequencyRange.value = external.invoke("getFrequency");
+
             waveformRange.addEventListener("change", function(event) {
                 external.invoke("setWaveform " + event.target.value);
             });
@@ -65,16 +68,26 @@ fn create_javascript_callback(
         let command = tokens.next().unwrap_or("");
         let argument = tokens.next().unwrap_or("").parse::<f32>();
 
-        if argument.is_ok() {
-            match command {
-                "setWaveform" => {
-                    oscillator.lock().unwrap().waveform = argument.unwrap();
-                },
-                "setFrequency" => {
-                    oscillator.lock().unwrap().frequency = argument.unwrap();
-                },
-                _ => {}
-            }
+        let mut locked_oscillator = oscillator.lock().unwrap();
+
+        match command {
+            "getWaveform" => {
+                return locked_oscillator.waveform.to_string();
+            },
+            "getFrequency" => {
+                return locked_oscillator.frequency.to_string();
+            },
+            "setWaveform" => {
+                if argument.is_ok() {
+                    locked_oscillator.waveform = argument.unwrap();
+                }
+            },
+            "setFrequency" => {
+                if argument.is_ok() {
+                    locked_oscillator.frequency = argument.unwrap();
+                }
+            },
+            _ => {}
         }
 
         String::new()
