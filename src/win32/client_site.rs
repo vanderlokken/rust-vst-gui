@@ -1,5 +1,4 @@
 use std::boxed::Box;
-use std::ops::Drop;
 use std::ptr::null_mut;
 use std::rc::Rc;
 
@@ -25,6 +24,7 @@ use winapi::um::winnt::LCID;
 use winapi::um::winuser::*;
 
 use lib::JavascriptCallback;
+use win32::com_pointer::ComPointer;
 use win32::ffi::*;
 
 #[repr(C, packed)]
@@ -33,8 +33,8 @@ struct ClientSite {
     ole_in_place_site: IOleInPlaceSite,
     doc_host_ui_handler: IDocHostUIHandler,
     dispatch: IDispatch,
-    ole_in_place_frame: *mut IOleInPlaceFrame,
-    ole_in_place_object: *mut IOleInPlaceObject,
+    ole_in_place_frame: ComPointer<IOleInPlaceFrame>,
+    ole_in_place_object: ComPointer<IOleInPlaceObject>,
     reference_counter: ULONG,
     window: HWND,
     callback: Rc<JavascriptCallback>,
@@ -67,15 +67,6 @@ impl ClientSite {
     {
         unsafe {
             member.offset(-(offset as isize)) as *mut ClientSite
-        }
-    }
-}
-
-impl Drop for ClientSite {
-    fn drop(&mut self) {
-        unsafe {
-            (*self.ole_in_place_frame).Release();
-            (*self.ole_in_place_object).Release();
         }
     }
 }
@@ -154,13 +145,9 @@ const DISPATCH_VTABLE: IDispatchVtbl = IDispatchVtbl {
 
 pub fn new_client_site(
     window: HWND,
-    ole_in_place_object: *mut IOleInPlaceObject,
-    callback: Rc<JavascriptCallback>) -> *mut IOleClientSite
+    ole_in_place_object: ComPointer<IOleInPlaceObject>,
+    callback: Rc<JavascriptCallback>) -> ComPointer<IOleClientSite>
 {
-    unsafe {
-        (*ole_in_place_object).AddRef();
-    }
-
     let client_site = Box::new(
         ClientSite {
             ole_client_site: IOleClientSite {
@@ -182,7 +169,7 @@ pub fn new_client_site(
             callback: callback,
         });
 
-    Box::into_raw(client_site) as *mut IOleClientSite
+    ComPointer::from_raw(Box::into_raw(client_site) as *mut IOleClientSite)
 }
 
 unsafe extern "system" fn IOleClientSite_AddRef(
@@ -369,7 +356,7 @@ unsafe extern "system" fn IOleInPlaceSite_GetWindowContext(
 {
     let client_site = ClientSite::from_ole_in_place_site(instance);
 
-    *ppFrame = (*client_site).ole_in_place_frame;
+    *ppFrame = (*client_site).ole_in_place_frame.as_ptr();
     (**ppFrame).AddRef();
 
     *ppDoc = null_mut();
@@ -422,9 +409,15 @@ unsafe extern "system" fn IOleInPlaceSite_OnPosRectChange(
 {
     let client_site = ClientSite::from_ole_in_place_site(instance);
 
-    (*(*client_site).ole_in_place_object).SetObjectRects(
-        lprcPosRect,
-        lprcPosRect);
+    (*client_site)
+        .ole_in_place_object
+        .get()
+        .map(|ole_in_place_object| {
+            ole_in_place_object.SetObjectRects(
+                lprcPosRect,
+                lprcPosRect);
+        });
+
     S_OK
 }
 
@@ -779,7 +772,7 @@ const OLE_IN_PLACE_FRAME_VTABLE: IOleInPlaceFrameVtbl = IOleInPlaceFrameVtbl {
     TranslateAccelerator: IOleInPlaceFrame_TranslateAccelerator,
 };
 
-fn new_in_place_frame(window: HWND) -> *mut IOleInPlaceFrame {
+fn new_in_place_frame(window: HWND) -> ComPointer<IOleInPlaceFrame> {
     let in_place_frame = Box::new(
         InPlaceFrame {
             ole_in_place_frame: IOleInPlaceFrame {
@@ -789,7 +782,8 @@ fn new_in_place_frame(window: HWND) -> *mut IOleInPlaceFrame {
             window: window,
         });
 
-    Box::into_raw(in_place_frame) as *mut IOleInPlaceFrame
+    ComPointer::from_raw(
+        Box::into_raw(in_place_frame) as *mut IOleInPlaceFrame)
 }
 
 unsafe extern "system" fn IOleInPlaceFrame_AddRef(

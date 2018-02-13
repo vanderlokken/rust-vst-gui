@@ -40,7 +40,7 @@ RIDL!{
     #[uuid(0x00000112, 0x0000, 0x0000, 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46)]
     interface IOleObject(IOleObjectVtbl) : IUnknown(IUnknownVtbl) {
         fn SetClientSite(pClientSite: *mut IOleClientSite,) -> HRESULT,
-        fn GetClientSite(ppClientSite: *mut *mut IOleClientSite,) -> HRESULT,
+        fn Unused_GetClientSite() -> HRESULT,
         fn Unused_SetHostNames() -> HRESULT,
         fn Unused_Close() -> HRESULT,
         fn Unused_SetMoniker() -> HRESULT,
