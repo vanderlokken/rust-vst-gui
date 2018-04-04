@@ -6,12 +6,14 @@ extern crate memoffset;
 extern crate winapi;
 extern crate vst;
 
+use std::error::Error;
 use std::os::raw::c_void;
 
 #[cfg(windows)]
 mod win32;
 
 mod lib {
+    use std::error::Error;
     use std::os::raw::c_void;
 
     pub type JavascriptCallback = Box<Fn(String) -> String>;
@@ -22,11 +24,20 @@ mod lib {
         fn close(&mut self);
         fn open(&mut self, parent_handle: *mut c_void);
         fn is_open(&mut self) -> bool;
+        fn execute(&self, javascript_code: &str) -> Result<(), Box<Error>>;
     }
 }
 
 pub struct PluginGui {
     gui: Box<lib::PluginGui>,
+}
+
+impl PluginGui {
+    // Calls the Javascript 'eval' function with the specified argument.
+    // This method always returns an error when the plugin window is closed.
+    pub fn execute(&self, javascript_code: &str) -> Result<(), Box<Error>> {
+        self.gui.execute(javascript_code)
+    }
 }
 
 impl vst::editor::Editor for PluginGui {

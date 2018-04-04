@@ -1,8 +1,13 @@
+use std::error::Error;
+use std::ffi::OsStr;
+use std::mem::uninitialized;
 use std::os::raw::c_void;
+use std::os::windows::ffi::OsStrExt;
 use std::ptr::{null, null_mut};
 use std::rc::Rc;
 
 use winapi::Interface;
+use winapi::shared::guiddef::*;
 use winapi::shared::minwindef::*;
 use winapi::shared::windef::*;
 use winapi::shared::winerror::*;
@@ -10,15 +15,20 @@ use winapi::shared::wtypes::*;
 use winapi::um::combaseapi::*;
 use winapi::um::libloaderapi::*;
 use winapi::um::oaidl::*;
+use winapi::um::oaidl::DISPID; // Required to eliminate ambiguity
 use winapi::um::objidlbase::*;
 use winapi::um::oleauto::*;
+use winapi::um::winnt::*;
 use winapi::um::winuser::*;
 
 use lib::{JavascriptCallback, PluginGui};
 use win32::client_site::*;
 use win32::com_pointer::*;
 use win32::ffi::*;
-use win32::error::*;
+
+fn error(message: &str) -> Box<Error> {
+    From::from(message)
+}
 
 struct Window {
     handle: HWND,
@@ -122,7 +132,7 @@ impl WebBrowser {
     fn new(
         window_handle: HWND,
         html_document: String,
-        js_callback: Rc<JavascriptCallback>) -> Result<WebBrowser, RuntimeError>
+        js_callback: Rc<JavascriptCallback>) -> Result<WebBrowser, Box<Error>>
     {
         unsafe {
             OleInitialize(null_mut());
@@ -142,7 +152,7 @@ impl WebBrowser {
     }
 
     fn new_browser_com_object() ->
-        Result<ComPointer<IWebBrowser2>, RuntimeError>
+        Result<ComPointer<IWebBrowser2>, Box<Error>>
     {
         let mut web_browser = ComPointer::<IWebBrowser2>::new();
 
@@ -160,8 +170,7 @@ impl WebBrowser {
         if result == S_OK && web_browser.get().is_some() {
             Ok(web_browser)
         } else {
-            Err(RuntimeError::new(
-                "Couldn't get an instance of the 'IWebBrowser2' class"))
+            Err(error("Couldn't get an instance of the 'IWebBrowser2' class"))
         }
     }
 
@@ -171,7 +180,7 @@ impl WebBrowser {
             .unwrap()
     }
 
-    fn open_blank_page(&self) -> Result<(), RuntimeError> {
+    fn open_blank_page(&self) -> Result<(), Box<Error>> {
         use std::ffi::OsStr;
         use std::os::windows::ffi::OsStrExt;
 
@@ -190,7 +199,7 @@ impl WebBrowser {
                 null_mut(),
                 null_mut()) != S_OK
             {
-                return Err(RuntimeError::new("Couldn't open blank page"))
+                return Err(error("Couldn't open a blank page"))
             }
 
             SysFreeString(url);
@@ -199,23 +208,60 @@ impl WebBrowser {
         Ok(())
     }
 
-    fn load_html_document(
-        &self, html_document: String) -> Result<(), RuntimeError>
-    {
-        let document_dispatch = {
-            let mut result = ComPointer::<IDispatch>::new();
+    fn document_dispatch(&self) -> Result<ComPointer<IDispatch>, Box<Error>> {
+        let mut result = ComPointer::<IDispatch>::new();
 
-            // TODO: don't assume the document is ready
-            let success = unsafe {
-                self.browser().get_Document(result.as_mut_ptr()) == S_OK
-            };
-            if success {result} else {ComPointer::<IDispatch>::new()}
+        let success = unsafe {
+            self.browser().get_Document(result.as_mut_ptr()) == S_OK &&
+                result.get().is_some()
         };
 
-        document_dispatch
+        match success {
+            true => Ok(result),
+            false => Err(
+                error(
+                    "The 'IWebBrowser2::get_Document' method returned an \
+                    error")),
+        }
+    }
+
+    fn window_dispatch(&self) -> Result<ComPointer<IDispatch>, Box<Error>> {
+        let document_dispatch = self.document_dispatch()?;
+
+        let window_dispatch = document_dispatch
+            .query_interface::<IHTMLDocument2>()
             .get()
-            .ok_or(RuntimeError::new(
-                "Couldn't get an instance of the 'IDispatch' class"))?;
+            .map(|document| {
+                let mut window = ComPointer::<IHTMLWindow2>::new();
+
+                unsafe {
+                    if document.get_parentWindow(window.as_mut_ptr()) == S_OK {
+                        window
+                    } else {
+                        ComPointer::<IHTMLWindow2>::new()
+                    }
+                }
+            })
+            .map(|window| {
+                window.query_interface::<IDispatch>()
+            })
+            .unwrap_or(ComPointer::<IDispatch>::new());
+
+        if window_dispatch.get().is_some() {
+            Ok(window_dispatch)
+        } else {
+            Err(
+                error(
+                    "Couldn't get an instance of the 'IDispatch' class \
+                    for the document window"))
+        }
+    }
+
+    fn load_html_document(
+        &self, html_document: String) -> Result<(), Box<Error>>
+    {
+        // TODO: do not assume the document is ready
+        let document_dispatch = self.document_dispatch()?;
 
         let stream = ComPointer::<IStream>::from_raw(
             unsafe {
@@ -226,8 +272,7 @@ impl WebBrowser {
 
         stream
             .get()
-            .ok_or(RuntimeError::new(
-                "Couldn't get an instance of the 'IStream' class"))?;
+            .ok_or(error("Couldn't get an instance of the 'IStream' class"))?;
 
         let success = document_dispatch
             .query_interface::<IPersistStreamInit>()
@@ -238,34 +283,38 @@ impl WebBrowser {
                     persist_stream.Load(stream.as_ptr()) == S_OK
                 }
             })
-            .ok_or(RuntimeError::new(
-                "Couldn't get an instance of the 'IPersistStreamInit' class"))?;
+            .ok_or(
+                error(
+                    "Couldn't get an instance of the 'IPersistStreamInit' \
+                    class"))?;
 
         match success {
             true => Ok(()),
-            false => Err(RuntimeError::new("Couldn't load an HTML document")),
+            false => Err(error("Couldn't load an HTML document")),
         }
     }
 
     fn embed(
         &self,
         window_handle: HWND,
-        js_callback: Rc<JavascriptCallback>) -> Result<(), RuntimeError>
+        js_callback: Rc<JavascriptCallback>) -> Result<(), Box<Error>>
     {
         let ole_object = self.browser.query_interface::<IOleObject>();
 
         ole_object
             .get()
-            .ok_or(RuntimeError::new(
-                "Couldn't get an instance of the 'IOleObject' class"))?;
+            .ok_or(
+                error("Couldn't get an instance of the 'IOleObject' class"))?;
 
         let ole_in_place_object =
             ole_object.query_interface::<IOleInPlaceObject>();
 
         ole_in_place_object
             .get()
-            .ok_or(RuntimeError::new(
-                "Couldn't get an instance of the 'IOleInPlaceObject' class"))?;
+            .ok_or(
+                error(
+                    "Couldn't get an instance of the 'IOleInPlaceObject' \
+                    class"))?;
 
         let client_site = new_client_site(
             window_handle, ole_in_place_object, js_callback);
@@ -293,7 +342,83 @@ impl WebBrowser {
 
         match success {
             true => Ok(()),
-            false => Err(RuntimeError::new("Couldn't reveal an HTML browser")),
+            false => Err(error("Couldn't reveal an HTML browser")),
+        }
+    }
+
+    fn execute(&self, javascript_code: &str) -> Result<(), Box<Error>> {
+        let window_dispatch = self.window_dispatch()?;
+
+        let argument_value: Vec<u16> = OsStr::new(javascript_code)
+            .encode_wide()
+            .collect();
+
+        unsafe {
+            let mut argument: VARIANT = uninitialized();
+
+            VariantInit(&mut argument);
+
+            argument.n1.n2_mut().vt = VT_BSTR as u16;
+            *argument.n1.n2_mut().n3.bstrVal_mut() = SysAllocStringLen(
+                argument_value.as_ptr(),
+                argument_value.len() as u32);
+
+            let mut parameters = DISPPARAMS {
+                rgvarg: &mut argument,
+                rgdispidNamedArgs: null_mut(),
+                cArgs: 1,
+                cNamedArgs: 0,
+            };
+
+            // TODO: cache the 'window_dispatch' object and the method id
+
+            let result = if window_dispatch
+                .get()
+                .unwrap()
+                .Invoke(
+                    WebBrowser::window_eval_method_id(&window_dispatch)?,
+                    &IID_NULL,
+                    LOCALE_SYSTEM_DEFAULT,
+                    DISPATCH_METHOD,
+                    &mut parameters,
+                    null_mut(),
+                    null_mut(),
+                    null_mut()) == S_OK
+            {
+                Ok(())
+            } else {
+                Err(error("Execution of the Javascript code failed"))
+            };
+
+            VariantClear(&mut argument);
+            result
+        }
+    }
+
+    fn window_eval_method_id(window_dispatch: &ComPointer<IDispatch>) ->
+        Result<DISPID, Box<Error>>
+    {
+        assert!(window_dispatch.get().is_some());
+
+        // The "eval" string in utf16.
+        let mut method_name: Vec<u16> =
+            vec![0x0065, 0x0076, 0x0061, 0x006c, 0x0000];
+        let mut id: DISPID = 0;
+
+        let result = unsafe {
+            window_dispatch
+                .get()
+                .unwrap()
+                .GetIDsOfNames(
+                    &IID_NULL,
+                    &mut method_name.as_mut_ptr(), 1, LOCALE_SYSTEM_DEFAULT,
+                    &mut id)
+        };
+
+        if result == S_OK {
+            Ok(id)
+        } else {
+            Err(error("Couldn't get an ID for the 'eval' method"))
         }
     }
 }
@@ -336,6 +461,14 @@ impl PluginGui for Gui {
 
     fn is_open(&mut self) -> bool {
         self.window.is_some()
+    }
+
+    fn execute(&self, javascript_code: &str) -> Result<(), Box<Error>> {
+        if let Some(ref web_browser) = self.web_browser {
+            web_browser.execute(javascript_code)
+        } else {
+            Err(error("The plugin window is closed"))
+        }
     }
 }
 
