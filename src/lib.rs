@@ -1,16 +1,20 @@
-#[cfg(windows)]
+#[cfg(all(windows, not(feature = "modern")))]
 #[macro_use]
 extern crate memoffset;
 #[cfg(windows)]
 #[macro_use]
 extern crate winapi;
+#[cfg(all(windows, feature = "modern"))]
+extern crate winrt;
 extern crate vst;
 
 use std::error::Error;
 use std::os::raw::c_void;
 
-#[cfg(windows)]
+#[cfg(all(windows, not(feature = "modern")))]
 mod win32;
+#[cfg(all(windows, feature = "modern"))]
+mod win32_modern;
 
 mod lib {
     use std::error::Error;
@@ -67,8 +71,14 @@ pub use lib::JavascriptCallback;
 pub fn new_plugin_gui(
     html_document: String, js_callback: JavascriptCallback) -> PluginGui
 {
-    #[cfg(windows)]
+    #[cfg(all(windows, not(feature = "modern")))]
     {
         PluginGui {gui: win32::new_plugin_gui(html_document, js_callback)}
+    }
+
+    #[cfg(all(windows, feature = "modern"))]
+    {
+        PluginGui {
+            gui: win32_modern::new_plugin_gui(html_document, js_callback)}
     }
 }
