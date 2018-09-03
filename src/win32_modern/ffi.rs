@@ -1,6 +1,9 @@
+use std::mem::zeroed;
 use std::ptr::null_mut;
 
 use winapi::shared::winerror::S_OK;
+use winapi::winrt::hstring::HSTRING;
+use winrt;
 use winrt::{
     ComIid,
     ComInterface,
@@ -8,6 +11,8 @@ use winrt::{
     Error,
     Guid,
     HRESULT,
+    HString,
+    HStringArg,
     IActivationFactory,
     IInspectable,
     IInspectableVtbl,
@@ -16,7 +21,8 @@ use winrt::{
     RtClassInterface,
     RtInterface,
     RtNamedClass,
-    RtType
+    RtType,
+    RtValueType
 };
 use winrt::windows::foundation;
 
@@ -306,6 +312,19 @@ macro_rules! DEFINE_CLSID {
     }
 }
 
+macro_rules! RT_PINTERFACE {
+    (
+        for $t:ty => [$l:expr, $w1:expr, $w2:expr,
+        $b1:expr, $b2:expr, $b3:expr, $b4:expr, $b5:expr,
+        $b6:expr, $b7:expr, $b8:expr] as $iid:ident
+    ) => {
+        DEFINE_IID!($iid, $l,$w1,$w2,$b1,$b2,$b3,$b4,$b5,$b6,$b7,$b8);
+        impl ComIid for $t {
+            #[inline] fn iid() -> &'static Guid { &$iid }
+        }
+    };
+}
+
 #[inline]
 pub fn err<T>(hr: HRESULT) -> Result<T> {
     Err(Error::from_hresult(hr))
@@ -328,10 +347,10 @@ RT_INTERFACE!{interface IWebViewControl(IWebViewControlVtbl): IInspectable(IInsp
     fn Unused_Refresh(&self) -> HRESULT,
     fn Unused_Stop(&self) -> HRESULT,
     fn Unused_Navigate(&self) -> HRESULT,
-    fn Unused_NavigateToString(&self) -> HRESULT,
+    fn NavigateToString(&self, text: HSTRING) -> HRESULT,
     fn Unused_NavigateToLocalStreamUri(&self) -> HRESULT,
     fn Unused_NavigateWithHttpRequestMessage(&self) -> HRESULT,
-    fn Unused_InvokeScriptAsync(&self) -> HRESULT,
+    fn InvokeScriptAsync(&self, scriptName: HSTRING, arguments: *mut foundation::collections::IIterable<HString>, out: *mut *mut foundation::IAsyncOperation<HString>) -> HRESULT,
     fn Unused_CapturePreviewToStreamAsync(&self) -> HRESULT,
     fn Unused_CaptureSelectedContentToDataPackageAsync(&self) -> HRESULT,
     fn Unused_BuildLocalStreamUri(&self) -> HRESULT,
@@ -352,7 +371,7 @@ RT_INTERFACE!{interface IWebViewControl(IWebViewControlVtbl): IInspectable(IInsp
     fn Unused_remove_FrameDOMContentLoaded(&self) -> HRESULT,
     fn Unused_add_FrameNavigationCompleted(&self) -> HRESULT,
     fn Unused_remove_FrameNavigationCompleted(&self) -> HRESULT,
-    fn Unused_add_ScriptNotify(&self) -> HRESULT,
+    fn add_ScriptNotify(&self, handler: *mut foundation::TypedEventHandler<IWebViewControl, WebViewControlScriptNotifyEventArgs>, out: *mut foundation::EventRegistrationToken) -> HRESULT,
     fn Unused_remove_ScriptNotify(&self) -> HRESULT,
     fn Unused_add_LongRunningScriptDetected(&self) -> HRESULT,
     fn Unused_remove_LongRunningScriptDetected(&self) -> HRESULT,
@@ -372,6 +391,23 @@ RT_INTERFACE!{interface IWebViewControl(IWebViewControlVtbl): IInspectable(IInsp
     fn Unused_remove_WebResourceRequested(&self) -> HRESULT
 }}
 RT_CLASS!{class WebViewControl: IWebViewControl}
+
+impl IWebViewControl {
+    #[inline] pub fn navigate_to_string(&self, text: &HStringArg) -> Result<()> { unsafe {
+        let hr = ((*self.lpVtbl).NavigateToString)(self as *const _ as *mut _, text.get());
+        if hr == S_OK { Ok(()) } else { err(hr) }
+    }}
+    #[inline] pub fn invoke_script_async(&self, scriptName: &HStringArg, arguments: &foundation::collections::IIterable<HString>) -> Result<ComPtr<foundation::IAsyncOperation<HString>>> { unsafe {
+        let mut out = null_mut();
+        let hr = ((*self.lpVtbl).InvokeScriptAsync)(self as *const _ as *mut _, scriptName.get(), arguments as *const _ as *mut _, &mut out);
+        if hr == S_OK { Ok(ComPtr::wrap(out)) } else { err(hr) }
+    }}
+    #[inline] pub fn add_script_notify(&self, handler: &foundation::TypedEventHandler<IWebViewControl, WebViewControlScriptNotifyEventArgs>) -> Result<foundation::EventRegistrationToken> { unsafe {
+        let mut out = zeroed();
+        let hr = ((*self.lpVtbl).add_ScriptNotify)(self as *const _ as *mut _, handler as *const _ as *mut _, &mut out);
+        if hr == S_OK { Ok(out) } else { err(hr) }
+    }}
+}
 
 DEFINE_IID!(IID_IWebViewControlProcessFactory, 1203133689, 41682, 17724, 176, 151, 246, 119, 157, 75, 142, 2);
 RT_INTERFACE!{static interface IWebViewControlProcessFactory(IWebViewControlProcessFactoryVtbl): IInspectable(IInspectableVtbl) [IID_IWebViewControlProcessFactory] {
@@ -397,7 +433,7 @@ RT_INTERFACE!{interface IWebViewControlProcess(IWebViewControlProcessVtbl): IIns
         out: *mut *mut foundation::IAsyncOperation<WebViewControl>
     ) -> HRESULT,
     fn Unused_GetWebViewControls(&self) -> HRESULT,
-    fn Unused_Terminate(&self) -> HRESULT,
+    fn Terminate(&self) -> HRESULT,
     fn Unused_add_ProcessExited(&self) -> HRESULT,
     fn Unused_remove_ProcessExited(&self) -> HRESULT
 }}
@@ -407,6 +443,10 @@ impl IWebViewControlProcess {
         let mut out = null_mut();
         let hr = ((*self.lpVtbl).CreateWebViewControlAsync)(self as *const _ as *mut _, hostWindowHandle, bounds, &mut out);
         if hr == S_OK { Ok(ComPtr::wrap(out)) } else { err(hr) }
+    }}
+    #[inline] pub fn terminate(&self) -> Result<()> { unsafe {
+        let hr = ((*self.lpVtbl).Terminate)(self as *const _ as *mut _);
+        if hr == S_OK { Ok(()) } else { err(hr) }
     }}
 }
 
@@ -431,3 +471,51 @@ RT_INTERFACE!{interface IWebViewControlProcessOptions(IWebViewControlProcessOpti
 RT_CLASS!{class WebViewControlProcessOptions: IWebViewControlProcessOptions}
 impl RtActivatable<IActivationFactory> for WebViewControlProcessOptions {}
 DEFINE_CLSID!(WebViewControlProcessOptions(&[87,105,110,100,111,119,115,46,87,101,98,46,85,73,46,73,110,116,101,114,111,112,46,87,101,98,86,105,101,119,67,111,110,116,114,111,108,80,114,111,99,101,115,115,79,112,116,105,111,110,115,0]) [CLSID_WebViewControlProcessOptions]);
+
+DEFINE_IID!(IID_IWebViewControlSite, 322914246, 4828, 18584, 189, 71, 4, 150, 125, 230, 72, 186);
+RT_INTERFACE!{interface IWebViewControlSite(IWebViewControlSiteVtbl): IInspectable(IInspectableVtbl) [IID_IWebViewControlSite] {
+    fn Unused_get_Process(&self) -> HRESULT,
+    fn Unused_put_Scale(&self) -> HRESULT,
+    fn Unused_get_Scale(&self) -> HRESULT,
+    fn Unused_put_Bounds(&self) -> HRESULT,
+    fn Unused_get_Bounds(&self) -> HRESULT,
+    fn put_IsVisible(&self, value: bool) -> HRESULT,
+    fn Unused_get_IsVisible(&self) -> HRESULT,
+    fn Close(&self) -> HRESULT,
+    fn Unused_MoveFocus(&self) -> HRESULT,
+    fn Unused_add_MoveFocusRequested(&self) -> HRESULT,
+    fn Unused_remove_MoveFocusRequested(&self) -> HRESULT,
+    fn Unused_add_AcceleratorKeyPressed(&self) -> HRESULT,
+    fn Unused_remove_AcceleratorKeyPressed(&self) -> HRESULT
+}}
+impl IWebViewControlSite {
+    #[inline] pub fn set_is_visible(&self, value: bool) -> Result<()> { unsafe {
+        let hr = ((*self.lpVtbl).put_IsVisible)(self as *const _ as *mut _, value);
+        if hr == S_OK { Ok(()) } else { err(hr) }
+    }}
+    #[inline] pub fn close(&self) -> Result<()> { unsafe {
+        let hr = ((*self.lpVtbl).Close)(self as *const _ as *mut _);
+        if hr == S_OK { Ok(()) } else { err(hr) }
+    }}
+}
+
+DEFINE_IID!(IID_IWebViewControlScriptNotifyEventArgs, 1226696059, 28489, 16827, 181, 145, 81, 184, 91, 129, 112, 55);
+RT_INTERFACE!{interface IWebViewControlScriptNotifyEventArgs(IWebViewControlScriptNotifyEventArgsVtbl): IInspectable(IInspectableVtbl) [IID_IWebViewControlScriptNotifyEventArgs] {
+    fn get_Uri(&self, out: *mut *mut foundation::Uri) -> HRESULT,
+    fn get_Value(&self, out: *mut HSTRING) -> HRESULT
+}}
+impl IWebViewControlScriptNotifyEventArgs {
+    #[inline] pub fn get_uri(&self) -> Result<Option<ComPtr<foundation::Uri>>> { unsafe {
+        let mut out = null_mut();
+        let hr = ((*self.lpVtbl).get_Uri)(self as *const _ as *mut _, &mut out);
+        if hr == S_OK { Ok(ComPtr::wrap_optional(out)) } else { err(hr) }
+    }}
+    #[inline] pub fn get_value(&self) -> Result<HString> { unsafe {
+        let mut out = null_mut();
+        let hr = ((*self.lpVtbl).get_Value)(self as *const _ as *mut _, &mut out);
+        if hr == S_OK { Ok(HString::wrap(out)) } else { err(hr) }
+    }}
+}
+RT_CLASS!{class WebViewControlScriptNotifyEventArgs: IWebViewControlScriptNotifyEventArgs}
+
+// RT_PINTERFACE!{ for foundation::AsyncOperationCompletedHandler<WebViewControl> => [0xd61963d6,0x806d,0x50a8,0xa8,0x1c,0x75,0xd9,0x35,0x6a,0xd5,0xd7] as IID_AsyncOperationCompletedHandler_1_Windows_Web_UI_Interop_WebViewControl }
