@@ -1,4 +1,3 @@
-use std;
 use std::error::Error;
 use std::ffi::OsStr;
 use std::iter::once;
@@ -6,24 +5,30 @@ use std::mem::transmute;
 use std::os::raw::c_void;
 use std::os::windows::ffi::OsStrExt;
 use std::ptr::{null, null_mut};
-use std::rc::Rc;
+use std::sync::Arc;
 
 use winrt;
-use winrt::{ComPtr, FastHString, HString, RtAsyncOperation};
+use winrt::{ComPtr, FastHString};
 use winrt::windows::foundation;
-use winrt::windows::foundation::collections::IIterable;
+use winrt::windows::web::ui::interop::{
+    IWebViewControlSite,
+    WebViewControl,
+    WebViewControlProcess,
+    WebViewControlProcessOptions
+};
+use winrt::windows::web::ui::{
+    WebViewControlScriptNotifyEventArgs
+};
 use winapi::shared::minwindef::*;
 use winapi::shared::windef::*;
 use winapi::um::combaseapi::*;
-use winapi::um::handleapi::*;
+use winapi::um::handleapi::CloseHandle;
 use winapi::um::libloaderapi::*;
-use winapi::um::synchapi::*;
+use winapi::um::synchapi::CreateEventW;
 use winapi::um::winuser::*;
 use winapi::winrt::roapi::{RO_INIT_SINGLETHREADED, RoInitialize};
 
 use lib::{JavascriptCallback, PluginGui};
-
-use win32_modern::ffi::*;
 
 fn error(message: &str) -> Box<Error> {
     From::from(message)
@@ -129,7 +134,6 @@ impl Window {
 
 struct WebBrowser {
     web_view_control_process: ComPtr<WebViewControlProcess>,
-    // web_view_async: ComPtr<foundation::IAsyncOperation<WebViewControl>>,
     web_view: ComPtr<WebViewControl>,
 }
 
@@ -137,7 +141,7 @@ impl WebBrowser {
     fn new(
         window_handle: HWND,
         html_document: String,
-        js_callback: Rc<JavascriptCallback>) -> Result<WebBrowser, Box<Error>>
+        js_callback: Arc<JavascriptCallback>) -> Result<WebBrowser, Box<Error>>
     {
         let options: ComPtr<WebViewControlProcessOptions> =
             winrt::RtDefaultConstructible::new();
@@ -154,28 +158,40 @@ impl WebBrowser {
                 .map_err(|error| into_error(
                     "'create_web_view_control_async' has failed", &error))?;
 
-        // We can't use the 'RtAsyncOperation::blocking_get' here because the
-        // following trait bounds are not satisfied:
-        // 'AsyncOperationCompletedHandler<WebViewControl>: ComIid'
+        // We can't use the 'RtAsyncOperation::blocking_get' here because it
+        // assumes multithreaded apartments.
         WebBrowser::blocking_wait(
             web_view_async.query_interface::<foundation::IAsyncInfo>()
                 .ok_or(error("Couldn't get an IAsyncInfo class instance"))?);
 
-        let browser = WebBrowser {
-            web_view_control_process: process,
-            web_view: web_view_async
-                .get_results()
-                .map_err(|error| into_error(
-                    "Couldn't create a WebView control instance", &error))?
-                .ok_or(error("Couldn't create a WebView control instance"))?
-        };
+        let web_view = web_view_async
+            .get_results()
+            .map_err(|error| into_error(
+                "Couldn't create a WebView control instance", &error))?
+            .ok_or(error("Couldn't create a WebView control instance"))?;
 
-        browser.web_view.navigate_to_string(&FastHString::new(&html_document))
+        web_view.navigate_to_string(&FastHString::new(&html_document))
             .map_err(|error| into_error(
                 "Couldn't open an HTML document", &error))?;
 
-        browser.web_view.add_script_notify(
-            &foundation::TypedEventHandler::new(|_, _| Ok(())));
+        let event_handler = move |
+                _,
+                arguments: *mut WebViewControlScriptNotifyEventArgs| {
+            unsafe {(*arguments).get_value()}
+                .map(|argument| js_callback(argument.to_string()))
+                .map(|_| ())
+        };
+
+       web_view
+            .add_script_notify(
+                &foundation::TypedEventHandler::new(event_handler))
+            .map_err(|error| into_error(
+                "Couldn't register an event handler", &error))?;
+
+        let browser = WebBrowser {
+            web_view_control_process: process,
+            web_view: web_view
+        };
 
         browser.execute("alert('1');")?;
 
@@ -226,7 +242,7 @@ impl WebBrowser {
         }
     }
 
-    fn execute(&self, javascript_code: &str) -> Result<(), Box<Error>> {
+    fn execute(&self, _javascript_code: &str) -> Result<(), Box<Error>> {
         // let arguments =
         //     foundation::PropertyValue::create_string_array(
         //         &[&FastHString::new(javascript_code)])
@@ -254,16 +270,19 @@ impl WebBrowser {
 
 impl Drop for WebBrowser {
     fn drop(&mut self) {
-        self.web_view.query_interface::<IWebViewControlSite>().map(
-            |site| site.close());
+        self.web_view
+            .query_interface::<IWebViewControlSite>()
+            .map(|site| site.close());
 
-        self.web_view_control_process.terminate().ok();
+        self.web_view_control_process
+            .terminate()
+            .ok();
     }
 }
 
 struct Gui {
     html_document: String,
-    js_callback: Rc<JavascriptCallback>,
+    js_callback: Arc<JavascriptCallback>,
     web_browser: Option<WebBrowser>,
     window: Option<Window>,
 }
@@ -281,8 +300,13 @@ impl PluginGui for Gui {
     }
 
     fn close(&mut self) {
-        self.web_browser = None;
-        self.window = None;
+        // Note: the following condition cannot be ommitted since the
+        // 'Drop::drop' method implementation for the 'WebBrowser' struct
+        // can recursively call this method.
+        if self.window.is_some() {
+            self.window = None;
+            self.web_browser = None;
+        }
     }
 
     fn open(&mut self, parent_handle: *mut c_void) {
@@ -335,7 +359,7 @@ pub fn new_plugin_gui(
     Box::new(
         Gui {
             html_document: html_document,
-            js_callback: Rc::new(js_callback),
+            js_callback: Arc::new(js_callback),
             web_browser: None,
             window: None,
         })

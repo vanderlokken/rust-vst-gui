@@ -39,14 +39,14 @@ const HTML: &'static str = r#"
             var waveformRange = document.getElementById("waveformRange");
             var frequencyRange = document.getElementById("frequencyRange");
 
-            waveformRange.value = external.invoke("getWaveform");
-            frequencyRange.value = external.invoke("getFrequency");
+            // waveformRange.value = external.invoke("getWaveform");
+            // frequencyRange.value = external.invoke("getFrequency");
 
-            waveformRange.addEventListener("change", function(event) {
-                external.invoke("setWaveform " + event.target.value);
+            waveformRange.addEventListener("input", function(event) {
+                external.notify("setWaveform " + event.target.value);
             });
-            frequencyRange.addEventListener("change", function(event) {
-                external.invoke("setFrequency " + event.target.value);
+            frequencyRange.addEventListener("input", function(event) {
+                external.notify("setFrequency " + event.target.value);
             });
         </script>
     </html>

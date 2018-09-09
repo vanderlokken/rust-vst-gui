@@ -1,11 +1,15 @@
 #[cfg(all(windows, not(feature = "modern")))]
 #[macro_use]
 extern crate memoffset;
-#[cfg(windows)]
+#[cfg(all(windows, not(feature = "modern")))]
 #[macro_use]
+extern crate winapi;
+
+#[cfg(all(windows, feature = "modern"))]
 extern crate winapi;
 #[cfg(all(windows, feature = "modern"))]
 extern crate winrt;
+
 extern crate vst;
 
 use std::error::Error;
@@ -20,7 +24,7 @@ mod lib {
     use std::error::Error;
     use std::os::raw::c_void;
 
-    pub type JavascriptCallback = Box<Fn(String) -> String>;
+    pub type JavascriptCallback = Box<Fn(String) -> String + Send + Sync>;
 
     pub trait PluginGui {
         fn size(&self) -> (i32, i32);
