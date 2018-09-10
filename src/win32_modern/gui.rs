@@ -1,5 +1,7 @@
+use std::env::temp_dir;
 use std::error::Error;
 use std::ffi::OsStr;
+use std::fs::File;
 use std::iter::once;
 use std::mem::transmute;
 use std::os::raw::c_void;
@@ -8,17 +10,23 @@ use std::ptr::{null, null_mut};
 use std::sync::Arc;
 
 use winrt;
-use winrt::{ComPtr, FastHString};
-use winrt::windows::foundation;
+use winrt::{ComInterface, ComPtr, FastHString, HString};
+use winrt::windows::foundation::{
+    AsyncStatus,
+    IAsyncInfo,
+    IAsyncOperation,
+    Rect,
+    TypedEventHandler
+};
+use winrt::windows::foundation::collections::{IIterable, IVector};
+use winrt::windows::storage::PathIO;
 use winrt::windows::web::ui::interop::{
     IWebViewControlSite,
     WebViewControl,
     WebViewControlProcess,
     WebViewControlProcessOptions
 };
-use winrt::windows::web::ui::{
-    WebViewControlScriptNotifyEventArgs
-};
+use winrt::windows::web::ui::WebViewControlScriptNotifyEventArgs;
 use winapi::shared::minwindef::*;
 use winapi::shared::windef::*;
 use winapi::um::combaseapi::*;
@@ -34,8 +42,11 @@ fn error(message: &str) -> Box<Error> {
     From::from(message)
 }
 
-fn into_error(message: &str, error: &winrt::Error) -> Box<Error> {
-    From::from(format!("{}: {:?}", message, error))
+fn map_result<T>(
+    result: winrt::Result<T>, method_name: &str) -> Result<T, Box<Error>>
+{
+    result.map_err(|error|
+        From::from(format!("'{}' has failed: {:?}", method_name, error)))
 }
 
 struct Window {
@@ -135,6 +146,7 @@ impl Window {
 struct WebBrowser {
     web_view_control_process: ComPtr<WebViewControlProcess>,
     web_view: ComPtr<WebViewControl>,
+    string_vector: ComPtr<IVector<HString>>,
 }
 
 impl WebBrowser {
@@ -146,33 +158,20 @@ impl WebBrowser {
         let options: ComPtr<WebViewControlProcessOptions> =
             winrt::RtDefaultConstructible::new();
 
-        let process = WebViewControlProcess::create_with_options(&*options)
-            .map_err(|error| into_error(
-                "Couldn't create a control process", &error))?;
+        let process = map_result(
+            WebViewControlProcess::create_with_options(&*options),
+            "WebViewControlProcess::create_with_options")?;
 
         let handle = unsafe {transmute::<HWND, i64>(window_handle)};
         let bounds = WebBrowser::determine_control_bounds(window_handle);
 
-        let web_view_async =
-            process.create_web_view_control_async(handle, bounds)
-                .map_err(|error| into_error(
-                    "'create_web_view_control_async' has failed", &error))?;
+        let web_view = WebBrowser::blocking_get(
+            process.create_web_view_control_async(handle, bounds),
+            "WebViewControlProcess::create_web_view_control_async")?.unwrap();
 
-        // We can't use the 'RtAsyncOperation::blocking_get' here because it
-        // assumes multithreaded apartments.
-        WebBrowser::blocking_wait(
-            web_view_async.query_interface::<foundation::IAsyncInfo>()
-                .ok_or(error("Couldn't get an IAsyncInfo class instance"))?);
-
-        let web_view = web_view_async
-            .get_results()
-            .map_err(|error| into_error(
-                "Couldn't create a WebView control instance", &error))?
-            .ok_or(error("Couldn't create a WebView control instance"))?;
-
-        web_view.navigate_to_string(&FastHString::new(&html_document))
-            .map_err(|error| into_error(
-                "Couldn't open an HTML document", &error))?;
+        map_result(
+            web_view.navigate_to_string(&FastHString::new(&html_document)),
+            "WebViewControl::navigate_to_string")?;
 
         let event_handler = move |
                 _,
@@ -182,23 +181,23 @@ impl WebBrowser {
                 .map(|_| ())
         };
 
-       web_view
-            .add_script_notify(
-                &foundation::TypedEventHandler::new(event_handler))
-            .map_err(|error| into_error(
-                "Couldn't register an event handler", &error))?;
+        map_result(
+            web_view.add_script_notify(
+                &TypedEventHandler::new(event_handler)),
+            "WebViewControl::add_script_notify")?;
 
         let browser = WebBrowser {
             web_view_control_process: process,
-            web_view: web_view
+            web_view: web_view,
+            string_vector: WebBrowser::create_string_vector()?
         };
 
-        browser.execute("alert('1');")?;
+        browser.execute("document.write('1');")?;
 
         Ok(browser)
     }
 
-    fn determine_control_bounds(window_handle: HWND) -> foundation::Rect {
+    fn determine_control_bounds(window_handle: HWND) -> Rect {
         let mut rectangle =
             RECT {left: 0, top: 0, right: 0, bottom: 0};
 
@@ -206,7 +205,7 @@ impl WebBrowser {
             GetClientRect(window_handle, &mut rectangle);
         }
 
-        foundation::Rect {
+        Rect {
             X: 0.0,
             Y: 0.0,
             Width: (rectangle.right - rectangle.left) as f32,
@@ -214,23 +213,25 @@ impl WebBrowser {
         }
     }
 
-    fn blocking_wait(async: ComPtr<foundation::IAsyncInfo>) {
+    // We can't use the 'RtAsyncOperation::blocking_wait' method because it
+    // works only when the multithreaded apartment model is used.
+    fn blocking_wait<T: ComInterface>(async: &ComPtr<T>) {
+        const TIMEOUT_IN_MILLISECONDS: DWORD = 10;
+
+        let mut index: DWORD = 0;
         let mut event = unsafe {
             CreateEventW(null_mut(), FALSE, FALSE, null())
         };
 
         while async
-                .get_status()
-                .unwrap_or(foundation::AsyncStatus::Error) ==
-                    foundation::AsyncStatus::Started {
+                .query_interface::<IAsyncInfo>()
+                .map(|async| async.get_status() == Ok(AsyncStatus::Started))
+                .unwrap_or(false) {
             unsafe {
-                const TIMEOUT_MSEC: DWORD = 10;
-                let mut index: DWORD = 0;
-
                 // We use this function to enter the COM modal loop.
                 CoWaitForMultipleHandles(
                     COWAIT_DISPATCH_CALLS,
-                    TIMEOUT_MSEC,
+                    TIMEOUT_IN_MILLISECONDS,
                     1,
                     &mut event,
                     &mut index);
@@ -242,29 +243,62 @@ impl WebBrowser {
         }
     }
 
-    fn execute(&self, _javascript_code: &str) -> Result<(), Box<Error>> {
-        // let arguments =
-        //     foundation::PropertyValue::create_string_array(
-        //         &[&FastHString::new(javascript_code)])
-        //     .map_err(|error|
-        //         into_error("Couldn't create arguments to 'eval'", &error))?
-        //     .ok_or(error("Couldn't create arguments to 'eval'"))?
-        //     .query_interface::<IIterable<HString>>();
+    // We can't use the 'RtAsyncOperation::blocking_get' method because it
+    // assumes multithreaded apartments.
+    fn blocking_get<T: winrt::RtType>(
+        async_result: winrt::Result<ComPtr<IAsyncOperation<T>>>,
+        method: &str) -> Result<T::Out, Box<Error>>
+    {
+        let async = map_result(async_result, method)?;
 
-        // if arguments.is_none() {
-        //     return Err(error("Not an 'IIterable<HString>' instance"));
-        // }
+        WebBrowser::blocking_wait(&async);
 
-        // self.web_view
-        //     .invoke_script_async(
-        //         &FastHString::new("eval"), &*iterable.unwrap())
-        //     .map_err(|error|
-        //         into_error("Couldn't execute JS code", &error))?
-        //     .blocking_get()
-        //     .map_err(|error|
-        //         into_error("JS code execution has failed", &error))?;
+        Ok(map_result(async.get_results(), method)?)
+    }
 
-        Ok(())
+    // Rust WinRT bindings don't contain an 'IVector' implmentation. So we
+    // obtain an instance of this class using the following method.
+    fn create_string_vector() -> Result<ComPtr<IVector<HString>>, Box<Error>> {
+        const FILENAME: &str = ".empty";
+
+        let path = temp_dir()
+            .join(FILENAME)
+            .to_str()
+            .unwrap_or(FILENAME)
+            .to_string();
+
+        let _file = File::create(path.clone())?;
+
+        let async = map_result(
+            PathIO::read_lines_async(&FastHString::new(&path)),
+            "PathIO::read_lines_async")?;
+
+        WebBrowser::blocking_wait(&async);
+
+        Ok(map_result(
+            async.get_results(), "IAsyncOperation::get_results")?.unwrap())
+    }
+
+    fn execute(&self, javascript_code: &str) -> Result<(), Box<Error>> {
+        let mut arguments = self.string_vector.clone();
+
+        map_result(
+            arguments.clear(),
+            "IVector::clear")?;
+        map_result(
+            arguments.append(&FastHString::new(javascript_code)),
+            "IVector::append")?;
+
+        let async = map_result(
+            self.web_view.invoke_script_async(
+                &FastHString::new("eval"),
+                &*arguments.query_interface::<IIterable<HString>>().unwrap()),
+            "WebViewControl::invoke_script_async")?;
+
+        WebBrowser::blocking_wait(&async);
+
+        map_result(async.get_results(), "IAsyncOperation::get_results")
+            .map(|_| ())
     }
 }
 
