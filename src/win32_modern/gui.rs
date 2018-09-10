@@ -10,7 +10,7 @@ use std::ptr::{null, null_mut};
 use std::sync::Arc;
 
 use winrt;
-use winrt::{ComInterface, ComPtr, FastHString, HString};
+use winrt::{ComInterface, ComPtr, FastHString, HString, RtType};
 use winrt::windows::foundation::{
     AsyncStatus,
     IAsyncInfo,
@@ -166,8 +166,10 @@ impl WebBrowser {
         let bounds = WebBrowser::determine_control_bounds(window_handle);
 
         let web_view = WebBrowser::blocking_get(
-            process.create_web_view_control_async(handle, bounds),
-            "WebViewControlProcess::create_web_view_control_async")?.unwrap();
+            map_result(
+                process.create_web_view_control_async(handle, bounds),
+                "WebViewControlProcess::create_web_view_control_async")?
+        )?.ok_or(error("Unexpected null value"))?;
 
         map_result(
             web_view.navigate_to_string(&FastHString::new(&html_document)),
@@ -244,16 +246,12 @@ impl WebBrowser {
     }
 
     // We can't use the 'RtAsyncOperation::blocking_get' method because it
-    // assumes multithreaded apartments.
-    fn blocking_get<T: winrt::RtType>(
-        async_result: winrt::Result<ComPtr<IAsyncOperation<T>>>,
-        method: &str) -> Result<T::Out, Box<Error>>
+    // works only when the multithreaded apartment model is used.
+    fn blocking_get<T: RtType>(
+        async: ComPtr<IAsyncOperation<T>>) -> Result<T::Out, Box<Error>>
     {
-        let async = map_result(async_result, method)?;
-
         WebBrowser::blocking_wait(&async);
-
-        Ok(map_result(async.get_results(), method)?)
+        map_result(async.get_results(), "IAsyncOperation::get_results")
     }
 
     // Rust WinRT bindings don't contain an 'IVector' implmentation. So we
@@ -269,14 +267,11 @@ impl WebBrowser {
 
         let _file = File::create(path.clone())?;
 
-        let async = map_result(
-            PathIO::read_lines_async(&FastHString::new(&path)),
-            "PathIO::read_lines_async")?;
-
-        WebBrowser::blocking_wait(&async);
-
-        Ok(map_result(
-            async.get_results(), "IAsyncOperation::get_results")?.unwrap())
+        WebBrowser::blocking_get(
+            map_result(
+                PathIO::read_lines_async(&FastHString::new(&path)),
+                "PathIO::read_lines_async")?
+        )?.ok_or(error("Unexpected null value"))
     }
 
     fn execute(&self, javascript_code: &str) -> Result<(), Box<Error>> {
@@ -289,16 +284,18 @@ impl WebBrowser {
             arguments.append(&FastHString::new(javascript_code)),
             "IVector::append")?;
 
-        let async = map_result(
-            self.web_view.invoke_script_async(
-                &FastHString::new("eval"),
-                &*arguments.query_interface::<IIterable<HString>>().unwrap()),
-            "WebViewControl::invoke_script_async")?;
+        let function_name = FastHString::new("eval");
+        let arguments_iterable =
+            arguments.query_interface::<IIterable<HString>>().unwrap();
 
-        WebBrowser::blocking_wait(&async);
+        WebBrowser::blocking_get(
+            map_result(
+                self.web_view.invoke_script_async(
+                    &function_name,
+                    &*arguments_iterable),
+                "WebViewControl::invoke_script_async")?)?;
 
-        map_result(async.get_results(), "IAsyncOperation::get_results")
-            .map(|_| ())
+        Ok(())
     }
 }
 
