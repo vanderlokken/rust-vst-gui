@@ -2,14 +2,15 @@
 
 use std::os::raw::*;
 
+// Non-asterisk imports are required to eliminate ambiguity
 use winapi::shared::guiddef::*;
 use winapi::shared::minwindef::*;
 use winapi::shared::windef::*;
-use winapi::shared::windef::SIZE; // Required to eliminate ambiguity
+use winapi::shared::windef::SIZE;
 use winapi::shared::wtypes::*;
 use winapi::shared::wtypesbase::*;
 use winapi::um::oaidl::*;
-use winapi::um::objidl::*;
+use winapi::um::objidl::{IMoniker, IPersist,  IPersistVtbl};
 use winapi::um::objidlbase::*;
 use winapi::um::unknwnbase::*;
 use winapi::um::winnt::*;
