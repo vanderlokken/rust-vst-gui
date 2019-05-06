@@ -16,7 +16,7 @@ use winapi::shared::wtypesbase::*;
 use winapi::shared::wtypes::VT_BSTR;
 use winapi::um::oaidl::*;
 use winapi::um::oaidl::DISPID;
-use winapi::um::objidl::*;
+use winapi::um::objidl::IMoniker;
 use winapi::um::oleauto::*;
 use winapi::um::unknwnbase::*;
 use winapi::um::winbase::*;
