@@ -6,7 +6,6 @@ use std::os::windows::ffi::OsStrExt;
 use std::ptr::{null, null_mut};
 use std::rc::Rc;
 
-use winapi::Interface;
 use winapi::shared::guiddef::*;
 use winapi::shared::minwindef::*;
 use winapi::shared::windef::*;
@@ -14,19 +13,20 @@ use winapi::shared::winerror::*;
 use winapi::shared::wtypes::*;
 use winapi::um::combaseapi::*;
 use winapi::um::libloaderapi::*;
-use winapi::um::oaidl::*;
 use winapi::um::oaidl::DISPID; // Required to eliminate ambiguity
+use winapi::um::oaidl::*;
 use winapi::um::objidlbase::*;
 use winapi::um::oleauto::*;
 use winapi::um::winnt::*;
 use winapi::um::winuser::*;
+use winapi::Interface;
 
 use lib::{JavascriptCallback, PluginGui};
 use win32::client_site::*;
 use win32::com_pointer::*;
 use win32::ffi::*;
 
-fn error(message: &str) -> Box<Error> {
+fn error(message: &str) -> Box<dyn Error> {
     From::from(message)
 }
 
@@ -37,8 +37,9 @@ struct Window {
 impl Window {
     // The "plugin_window" string in utf16.
     const CLASS_NAME: [u16; 14] = [
-        0x0070, 0x006c, 0x0075, 0x0067, 0x0069, 0x006e, 0x005f, 0x0077,
-        0x0069, 0x006e, 0x0064, 0x006f, 0x0077, 0x0000];
+        0x0070, 0x006c, 0x0075, 0x0067, 0x0069, 0x006e, 0x005f, 0x0077, 0x0069, 0x006e, 0x0064,
+        0x006f, 0x0077, 0x0000,
+    ];
 
     pub fn new(parent: HWND) -> Window {
         Window::register_window_class();
@@ -59,17 +60,20 @@ impl Window {
                 parent,
                 null_mut(), /*menu*/
                 GetModuleHandleW(null()),
-                null_mut())
+                null_mut(),
+            )
         };
 
-        Window {
-            handle: handle,
-        }
+        Window { handle: handle }
     }
 
     fn size(&self) -> (i32, i32) {
-        let mut rectangle =
-            RECT {left: 0, top: 0, right: 0, bottom: 0};
+        let mut rectangle = RECT {
+            left: 0,
+            top: 0,
+            right: 0,
+            bottom: 0,
+        };
 
         unsafe {
             GetWindowRect(self.handle, &mut rectangle);
@@ -101,7 +105,7 @@ impl Window {
             hCursor: unsafe { LoadCursorW(null_mut(), IDC_ARROW) },
             hbrBackground: null_mut(),
             lpszMenuName: null(),
-            lpszClassName: Window::CLASS_NAME.as_ptr()
+            lpszClassName: Window::CLASS_NAME.as_ptr(),
         };
 
         unsafe {
@@ -110,17 +114,18 @@ impl Window {
     }
 
     extern "system" fn window_procedure(
-        handle: HWND, message: UINT, wparam: WPARAM, lparam: LPARAM) -> LRESULT
-    {
+        handle: HWND,
+        message: UINT,
+        wparam: WPARAM,
+        lparam: LPARAM,
+    ) -> LRESULT {
         match message {
             WM_GETDLGCODE => {
                 return DLGC_WANTALLKEYS;
-            },
+            }
             _ => {}
         }
-        unsafe {
-            DefWindowProcW(handle, message, wparam, lparam)
-        }
+        unsafe { DefWindowProcW(handle, message, wparam, lparam) }
     }
 }
 
@@ -132,14 +137,14 @@ impl WebBrowser {
     fn new(
         window_handle: HWND,
         html_document: String,
-        js_callback: Rc<JavascriptCallback>) -> Result<WebBrowser, Box<Error>>
-    {
+        js_callback: Rc<JavascriptCallback>,
+    ) -> Result<WebBrowser, Box<dyn Error>> {
         unsafe {
             OleInitialize(null_mut());
         }
 
         let browser = WebBrowser {
-            browser: WebBrowser::new_browser_com_object()?
+            browser: WebBrowser::new_browser_com_object()?,
         };
 
         browser.embed(window_handle, js_callback)?;
@@ -151,55 +156,44 @@ impl WebBrowser {
         Ok(browser)
     }
 
-    fn new_browser_com_object() ->
-        Result<ComPointer<IWebBrowser2>, Box<Error>>
-    {
+    fn new_browser_com_object() -> Result<ComPointer<IWebBrowser2>, Box<dyn Error>> {
         let mut web_browser = ComPointer::<IWebBrowser2>::new();
 
         let result = unsafe {
-             CoCreateInstance(
+            CoCreateInstance(
                 &CLSID_WebBrowser,
                 null_mut(),
                 CLSCTX_INPROC,
                 &IWebBrowser2::uuidof(),
-                web_browser.as_mut_ptr()
-                    as *mut *mut IWebBrowser2
-                    as *mut LPVOID)
+                web_browser.as_mut_ptr() as *mut *mut IWebBrowser2 as *mut LPVOID,
+            )
         };
 
         if result == S_OK && web_browser.get().is_some() {
             Ok(web_browser)
         } else {
-            Err(error("Couldn't get an instance of the 'IWebBrowser2' class"))
+            Err(error(
+                "Couldn't get an instance of the 'IWebBrowser2' class",
+            ))
         }
     }
 
     fn browser(&self) -> &IWebBrowser2 {
-        self.browser
-            .get()
-            .unwrap()
+        self.browser.get().unwrap()
     }
 
-    fn open_blank_page(&self) -> Result<(), Box<Error>> {
-        use std::ffi::OsStr;
-        use std::os::windows::ffi::OsStrExt;
-
-        let url_buffer: Vec<u16> =
-            OsStr::new("about:blank").encode_wide().collect();
+    fn open_blank_page(&self) -> Result<(), Box<dyn Error>> {
+        let url_buffer: Vec<u16> = OsStr::new("about:blank").encode_wide().collect();
 
         unsafe {
-            let url = SysAllocStringLen(
-                url_buffer.as_ptr(),
-                url_buffer.len() as u32);
+            let url = SysAllocStringLen(url_buffer.as_ptr(), url_buffer.len() as u32);
 
-            if self.browser().Navigate(
-                url,
-                null_mut(),
-                null_mut(),
-                null_mut(),
-                null_mut()) != S_OK
+            if self
+                .browser()
+                .Navigate(url, null_mut(), null_mut(), null_mut(), null_mut())
+                != S_OK
             {
-                return Err(error("Couldn't open a blank page"))
+                return Err(error("Couldn't open a blank page"));
             }
 
             SysFreeString(url);
@@ -208,24 +202,23 @@ impl WebBrowser {
         Ok(())
     }
 
-    fn document_dispatch(&self) -> Result<ComPointer<IDispatch>, Box<Error>> {
+    fn document_dispatch(&self) -> Result<ComPointer<IDispatch>, Box<dyn Error>> {
         let mut result = ComPointer::<IDispatch>::new();
 
         let success = unsafe {
-            self.browser().get_Document(result.as_mut_ptr()) == S_OK &&
-                result.get().is_some()
+            self.browser().get_Document(result.as_mut_ptr()) == S_OK && result.get().is_some()
         };
 
         match success {
             true => Ok(result),
-            false => Err(
-                error(
-                    "The 'IWebBrowser2::get_Document' method returned an \
-                    error")),
+            false => Err(error(
+                "The 'IWebBrowser2::get_Document' method returned an \
+                 error",
+            )),
         }
     }
 
-    fn window_dispatch(&self) -> Result<ComPointer<IDispatch>, Box<Error>> {
+    fn window_dispatch(&self) -> Result<ComPointer<IDispatch>, Box<dyn Error>> {
         let document_dispatch = self.document_dispatch()?;
 
         let window_dispatch = document_dispatch
@@ -242,33 +235,26 @@ impl WebBrowser {
                     }
                 }
             })
-            .map(|window| {
-                window.query_interface::<IDispatch>()
-            })
+            .map(|window| window.query_interface::<IDispatch>())
             .unwrap_or(ComPointer::<IDispatch>::new());
 
         if window_dispatch.get().is_some() {
             Ok(window_dispatch)
         } else {
-            Err(
-                error(
-                    "Couldn't get an instance of the 'IDispatch' class \
-                    for the document window"))
+            Err(error(
+                "Couldn't get an instance of the 'IDispatch' class \
+                 for the document window",
+            ))
         }
     }
 
-    fn load_html_document(
-        &self, html_document: String) -> Result<(), Box<Error>>
-    {
+    fn load_html_document(&self, html_document: String) -> Result<(), Box<dyn Error>> {
         // TODO: do not assume the document is ready
         let document_dispatch = self.document_dispatch()?;
 
-        let stream = ComPointer::<IStream>::from_raw(
-            unsafe {
-                SHCreateMemStream(
-                    html_document.as_ptr(),
-                    html_document.len() as u32)
-            });
+        let stream = ComPointer::<IStream>::from_raw(unsafe {
+            SHCreateMemStream(html_document.as_ptr(), html_document.len() as u32)
+        });
 
         stream
             .get()
@@ -277,16 +263,13 @@ impl WebBrowser {
         let success = document_dispatch
             .query_interface::<IPersistStreamInit>()
             .get()
-            .map(|persist_stream| {
-                unsafe {
-                    persist_stream.InitNew() == S_OK &&
-                    persist_stream.Load(stream.as_ptr()) == S_OK
-                }
+            .map(|persist_stream| unsafe {
+                persist_stream.InitNew() == S_OK && persist_stream.Load(stream.as_ptr()) == S_OK
             })
-            .ok_or(
-                error(
-                    "Couldn't get an instance of the 'IPersistStreamInit' \
-                    class"))?;
+            .ok_or(error(
+                "Couldn't get an instance of the 'IPersistStreamInit' \
+                 class",
+            ))?;
 
         match success {
             true => Ok(()),
@@ -297,46 +280,50 @@ impl WebBrowser {
     fn embed(
         &self,
         window_handle: HWND,
-        js_callback: Rc<JavascriptCallback>) -> Result<(), Box<Error>>
-    {
+        js_callback: Rc<JavascriptCallback>,
+    ) -> Result<(), Box<dyn Error>> {
         let ole_object = self.browser.query_interface::<IOleObject>();
 
         ole_object
             .get()
-            .ok_or(
-                error("Couldn't get an instance of the 'IOleObject' class"))?;
+            .ok_or(error("Couldn't get an instance of the 'IOleObject' class"))?;
 
-        let ole_in_place_object =
-            ole_object.query_interface::<IOleInPlaceObject>();
+        let ole_in_place_object = ole_object.query_interface::<IOleInPlaceObject>();
 
-        ole_in_place_object
-            .get()
-            .ok_or(
-                error(
-                    "Couldn't get an instance of the 'IOleInPlaceObject' \
-                    class"))?;
+        ole_in_place_object.get().ok_or(error(
+            "Couldn't get an instance of the 'IOleInPlaceObject' \
+             class",
+        ))?;
 
-        let client_site = new_client_site(
-            window_handle, ole_in_place_object, js_callback);
+        let client_site = new_client_site(window_handle, ole_in_place_object, js_callback);
 
         let success = {
-            let mut rectangle = RECT {left: 0, top: 0, right: 0, bottom: 0};
+            let mut rectangle = RECT {
+                left: 0,
+                top: 0,
+                right: 0,
+                bottom: 0,
+            };
 
             unsafe {
                 GetClientRect(window_handle, &mut rectangle);
 
-                ole_object.get().unwrap().SetClientSite(
-                    client_site.as_ptr()) == S_OK &&
-                ole_object.get().unwrap().DoVerb(
-                    OLEIVERB_INPLACEACTIVATE,
-                    null_mut(),
-                    client_site.as_ptr(),
-                    0,
-                    window_handle,
-                    &rectangle) == S_OK &&
-                self.browser().put_Width(rectangle.right) == S_OK &&
-                self.browser().put_Height(rectangle.bottom) == S_OK &&
-                self.browser().put_Visible(TRUE as VARIANT_BOOL) == S_OK
+                ole_object
+                    .get()
+                    .unwrap()
+                    .SetClientSite(client_site.as_ptr())
+                    == S_OK
+                    && ole_object.get().unwrap().DoVerb(
+                        OLEIVERB_INPLACEACTIVATE,
+                        null_mut(),
+                        client_site.as_ptr(),
+                        0,
+                        window_handle,
+                        &rectangle,
+                    ) == S_OK
+                    && self.browser().put_Width(rectangle.right) == S_OK
+                    && self.browser().put_Height(rectangle.bottom) == S_OK
+                    && self.browser().put_Visible(TRUE as VARIANT_BOOL) == S_OK
             }
         };
 
@@ -346,12 +333,10 @@ impl WebBrowser {
         }
     }
 
-    fn execute(&self, javascript_code: &str) -> Result<(), Box<Error>> {
+    fn execute(&self, javascript_code: &str) -> Result<(), Box<dyn Error>> {
         let window_dispatch = self.window_dispatch()?;
 
-        let argument_value: Vec<u16> = OsStr::new(javascript_code)
-            .encode_wide()
-            .collect();
+        let argument_value: Vec<u16> = OsStr::new(javascript_code).encode_wide().collect();
 
         unsafe {
             let mut argument: VARIANT = uninitialized();
@@ -359,9 +344,8 @@ impl WebBrowser {
             VariantInit(&mut argument);
 
             argument.n1.n2_mut().vt = VT_BSTR as u16;
-            *argument.n1.n2_mut().n3.bstrVal_mut() = SysAllocStringLen(
-                argument_value.as_ptr(),
-                argument_value.len() as u32);
+            *argument.n1.n2_mut().n3.bstrVal_mut() =
+                SysAllocStringLen(argument_value.as_ptr(), argument_value.len() as u32);
 
             let mut parameters = DISPPARAMS {
                 rgvarg: &mut argument,
@@ -372,18 +356,16 @@ impl WebBrowser {
 
             // TODO: cache the 'window_dispatch' object and the method id
 
-            let result = if window_dispatch
-                .get()
-                .unwrap()
-                .Invoke(
-                    WebBrowser::window_eval_method_id(&window_dispatch)?,
-                    &IID_NULL,
-                    LOCALE_SYSTEM_DEFAULT,
-                    DISPATCH_METHOD,
-                    &mut parameters,
-                    null_mut(),
-                    null_mut(),
-                    null_mut()) == S_OK
+            let result = if window_dispatch.get().unwrap().Invoke(
+                WebBrowser::window_eval_method_id(&window_dispatch)?,
+                &IID_NULL,
+                LOCALE_SYSTEM_DEFAULT,
+                DISPATCH_METHOD,
+                &mut parameters,
+                null_mut(),
+                null_mut(),
+                null_mut(),
+            ) == S_OK
             {
                 Ok(())
             } else {
@@ -395,24 +377,23 @@ impl WebBrowser {
         }
     }
 
-    fn window_eval_method_id(window_dispatch: &ComPointer<IDispatch>) ->
-        Result<DISPID, Box<Error>>
-    {
+    fn window_eval_method_id(
+        window_dispatch: &ComPointer<IDispatch>,
+    ) -> Result<DISPID, Box<dyn Error>> {
         assert!(window_dispatch.get().is_some());
 
         // The "eval" string in utf16.
-        let mut method_name: Vec<u16> =
-            vec![0x0065, 0x0076, 0x0061, 0x006c, 0x0000];
+        let mut method_name: Vec<u16> = vec![0x0065, 0x0076, 0x0061, 0x006c, 0x0000];
         let mut id: DISPID = 0;
 
         let result = unsafe {
-            window_dispatch
-                .get()
-                .unwrap()
-                .GetIDsOfNames(
-                    &IID_NULL,
-                    &mut method_name.as_mut_ptr(), 1, LOCALE_SYSTEM_DEFAULT,
-                    &mut id)
+            window_dispatch.get().unwrap().GetIDsOfNames(
+                &IID_NULL,
+                &mut method_name.as_mut_ptr(),
+                1,
+                LOCALE_SYSTEM_DEFAULT,
+                &mut id,
+            )
         };
 
         if result == S_OK {
@@ -434,7 +415,7 @@ impl PluginGui for Gui {
     fn size(&self) -> (i32, i32) {
         match self.window {
             Some(ref window) => window.size(),
-            None => (0, 0)
+            None => (0, 0),
         }
     }
 
@@ -454,8 +435,9 @@ impl PluginGui for Gui {
         self.web_browser = WebBrowser::new(
             window.handle,
             self.html_document.clone(),
-            self.js_callback.clone()
-        ).ok();
+            self.js_callback.clone(),
+        )
+        .ok();
         self.window = Some(window);
     }
 
@@ -463,7 +445,7 @@ impl PluginGui for Gui {
         self.window.is_some()
     }
 
-    fn execute(&self, javascript_code: &str) -> Result<(), Box<Error>> {
+    fn execute(&self, javascript_code: &str) -> Result<(), Box<dyn Error>> {
         if let Some(ref web_browser) = self.web_browser {
             web_browser.execute(javascript_code)
         } else {
@@ -472,15 +454,11 @@ impl PluginGui for Gui {
     }
 }
 
-pub fn new_plugin_gui(
-    html_document: String,
-    js_callback: JavascriptCallback) -> Box<PluginGui>
-{
-    Box::new(
-        Gui {
-            html_document: html_document,
-            js_callback: Rc::new(js_callback),
-            web_browser: None,
-            window: None,
-        })
+pub fn new_plugin_gui(html_document: String, js_callback: JavascriptCallback) -> Box<dyn PluginGui> {
+    Box::new(Gui {
+        html_document: html_document,
+        js_callback: Rc::new(js_callback),
+        web_browser: None,
+        window: None,
+    })
 }
