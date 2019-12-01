@@ -168,7 +168,7 @@ impl Plugin for ExampleSynth {
         oscillator.phase = phase(buffer.samples()) % (2.0 * PI);
     }
 
-    fn get_editor(&mut self) -> Option<&mut Editor> {
+    fn get_editor(&mut self) -> Option<&mut dyn Editor> {
         Some(&mut self.gui)
     }
 }
