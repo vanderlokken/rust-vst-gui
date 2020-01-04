@@ -22,7 +22,7 @@ mod lib {
         fn size(&self) -> (i32, i32);
         fn position(&self) -> (i32, i32);
         fn close(&mut self);
-        fn open(&mut self, parent_handle: *mut c_void);
+        fn open(&mut self, parent_handle: *mut c_void) -> bool;
         fn is_open(&mut self) -> bool;
         fn execute(&self, javascript_code: &str) -> Result<(), Box<Error>>;
     }
@@ -53,7 +53,7 @@ impl vst::editor::Editor for PluginGui {
         self.gui.close()
     }
 
-    fn open(&mut self, parent_handle: *mut c_void) {
+    fn open(&mut self, parent_handle: *mut c_void) -> bool {
         self.gui.open(parent_handle)
     }
 
@@ -65,10 +65,10 @@ impl vst::editor::Editor for PluginGui {
 pub use lib::JavascriptCallback;
 
 pub fn new_plugin_gui(
-    html_document: String, js_callback: JavascriptCallback) -> PluginGui
+    html_document: String, js_callback: JavascriptCallback, window_size: Option<(i32, i32)>) -> PluginGui
 {
     #[cfg(windows)]
     {
-        PluginGui {gui: win32::new_plugin_gui(html_document, js_callback)}
+        PluginGui {gui: win32::new_plugin_gui(html_document, js_callback, window_size) }
     }
 }
