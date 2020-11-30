@@ -16,7 +16,7 @@ mod lib {
     use std::error::Error;
     use std::os::raw::c_void;
 
-    pub type JavascriptCallback = Box<Fn(String) -> String>;
+    pub type JavascriptCallback = Box<dyn Fn(String) -> String>;
 
     pub trait PluginGui {
         fn size(&self) -> (i32, i32);
@@ -24,18 +24,18 @@ mod lib {
         fn close(&mut self);
         fn open(&mut self, parent_handle: *mut c_void) -> bool;
         fn is_open(&mut self) -> bool;
-        fn execute(&self, javascript_code: &str) -> Result<(), Box<Error>>;
+        fn execute(&self, javascript_code: &str) -> Result<(), Box<dyn Error>>;
     }
 }
 
 pub struct PluginGui {
-    gui: Box<lib::PluginGui>,
+    gui: Box<dyn lib::PluginGui>,
 }
 
 impl PluginGui {
     // Calls the Javascript 'eval' function with the specified argument.
     // This method always returns an error when the plugin window is closed.
-    pub fn execute(&self, javascript_code: &str) -> Result<(), Box<Error>> {
+    pub fn execute(&self, javascript_code: &str) -> Result<(), Box<dyn Error>> {
         self.gui.execute(javascript_code)
     }
 }
@@ -65,10 +65,14 @@ impl vst::editor::Editor for PluginGui {
 pub use lib::JavascriptCallback;
 
 pub fn new_plugin_gui(
-    html_document: String, js_callback: JavascriptCallback, window_size: Option<(i32, i32)>) -> PluginGui
+    html_document: String,
+    js_callback: JavascriptCallback,
+    window_size: Option<(i32, i32)>) -> PluginGui
 {
     #[cfg(windows)]
     {
-        PluginGui {gui: win32::new_plugin_gui(html_document, js_callback, window_size) }
+        PluginGui {
+            gui: win32::new_plugin_gui(html_document, js_callback, window_size)
+        }
     }
 }

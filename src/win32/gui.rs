@@ -1,6 +1,6 @@
 use std::error::Error;
 use std::ffi::OsStr;
-use std::mem::uninitialized;
+use std::mem::zeroed;
 use std::os::raw::c_void;
 use std::os::windows::ffi::OsStrExt;
 use std::ptr::{null, null_mut};
@@ -26,7 +26,7 @@ use win32::client_site::*;
 use win32::com_pointer::*;
 use win32::ffi::*;
 
-fn error(message: &str) -> Box<Error> {
+fn error(message: &str) -> Box<dyn Error> {
     From::from(message)
 }
 
@@ -42,6 +42,7 @@ impl Window {
 
     pub fn new(parent: HWND, size: Option<(i32, i32)>) -> Window {
         Window::register_window_class();
+
         let window_size = size.unwrap_or_else(|| Window::default_size());
         let handle = unsafe {
             const STYLE: DWORD = WS_CHILD | WS_VISIBLE;
@@ -132,7 +133,8 @@ impl WebBrowser {
     fn new(
         window_handle: HWND,
         html_document: String,
-        js_callback: Rc<JavascriptCallback>) -> Result<WebBrowser, Box<Error>>
+        js_callback: Rc<JavascriptCallback>) ->
+            Result<WebBrowser, Box<dyn Error>>
     {
         unsafe {
             OleInitialize(null_mut());
@@ -152,7 +154,7 @@ impl WebBrowser {
     }
 
     fn new_browser_com_object() ->
-        Result<ComPointer<IWebBrowser2>, Box<Error>>
+        Result<ComPointer<IWebBrowser2>, Box<dyn Error>>
     {
         let mut web_browser = ComPointer::<IWebBrowser2>::new();
 
@@ -180,10 +182,7 @@ impl WebBrowser {
             .unwrap()
     }
 
-    fn open_blank_page(&self) -> Result<(), Box<Error>> {
-        use std::ffi::OsStr;
-        use std::os::windows::ffi::OsStrExt;
-
+    fn open_blank_page(&self) -> Result<(), Box<dyn Error>> {
         let url_buffer: Vec<u16> =
             OsStr::new("about:blank").encode_wide().collect();
 
@@ -208,7 +207,9 @@ impl WebBrowser {
         Ok(())
     }
 
-    fn document_dispatch(&self) -> Result<ComPointer<IDispatch>, Box<Error>> {
+    fn document_dispatch(&self) ->
+        Result<ComPointer<IDispatch>, Box<dyn Error>>
+    {
         let mut result = ComPointer::<IDispatch>::new();
 
         let success = unsafe {
@@ -225,7 +226,7 @@ impl WebBrowser {
         }
     }
 
-    fn window_dispatch(&self) -> Result<ComPointer<IDispatch>, Box<Error>> {
+    fn window_dispatch(&self) -> Result<ComPointer<IDispatch>, Box<dyn Error>> {
         let document_dispatch = self.document_dispatch()?;
 
         let window_dispatch = document_dispatch
@@ -258,7 +259,7 @@ impl WebBrowser {
     }
 
     fn load_html_document(
-        &self, html_document: String) -> Result<(), Box<Error>>
+        &self, html_document: String) -> Result<(), Box<dyn Error>>
     {
         // TODO: do not assume the document is ready
         let document_dispatch = self.document_dispatch()?;
@@ -297,7 +298,7 @@ impl WebBrowser {
     fn embed(
         &self,
         window_handle: HWND,
-        js_callback: Rc<JavascriptCallback>) -> Result<(), Box<Error>>
+        js_callback: Rc<JavascriptCallback>) -> Result<(), Box<dyn Error>>
     {
         let ole_object = self.browser.query_interface::<IOleObject>();
 
@@ -346,7 +347,7 @@ impl WebBrowser {
         }
     }
 
-    fn execute(&self, javascript_code: &str) -> Result<(), Box<Error>> {
+    fn execute(&self, javascript_code: &str) -> Result<(), Box<dyn Error>> {
         let window_dispatch = self.window_dispatch()?;
 
         let argument_value: Vec<u16> = OsStr::new(javascript_code)
@@ -354,7 +355,7 @@ impl WebBrowser {
             .collect();
 
         unsafe {
-            let mut argument: VARIANT = uninitialized();
+            let mut argument: VARIANT = zeroed();
 
             VariantInit(&mut argument);
 
@@ -396,7 +397,7 @@ impl WebBrowser {
     }
 
     fn window_eval_method_id(window_dispatch: &ComPointer<IDispatch>) ->
-        Result<DISPID, Box<Error>>
+        Result<DISPID, Box<dyn Error>>
     {
         assert!(window_dispatch.get().is_some());
 
@@ -460,7 +461,7 @@ impl PluginGui for Gui {
                 self.web_browser = Some(browser);
                 true
             },
-            Err(e) => false // TODO: Display errors
+            Err(_) => false // TODO: Display errors
         }
     }
 
@@ -468,7 +469,7 @@ impl PluginGui for Gui {
         self.window.is_some()
     }
 
-    fn execute(&self, javascript_code: &str) -> Result<(), Box<Error>> {
+    fn execute(&self, javascript_code: &str) -> Result<(), Box<dyn Error>> {
         if let Some(ref web_browser) = self.web_browser {
             web_browser.execute(javascript_code)
         } else {
@@ -480,7 +481,7 @@ impl PluginGui for Gui {
 pub fn new_plugin_gui(
     html_document: String,
     js_callback: JavascriptCallback,
-    window_size: Option<(i32, i32)>) -> Box<PluginGui>
+    window_size: Option<(i32, i32)>) -> Box<dyn PluginGui>
 {
     Box::new(
         Gui {
