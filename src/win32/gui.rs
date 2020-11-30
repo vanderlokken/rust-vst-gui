@@ -40,9 +40,9 @@ impl Window {
         0x0070, 0x006c, 0x0075, 0x0067, 0x0069, 0x006e, 0x005f, 0x0077,
         0x0069, 0x006e, 0x0064, 0x006f, 0x0077, 0x0000];
 
-    pub fn new(parent: HWND) -> Window {
+    pub fn new(parent: HWND, size: Option<(i32, i32)>) -> Window {
         Window::register_window_class();
-
+        let window_size = size.unwrap_or_else(|| Window::default_size());
         let handle = unsafe {
             const STYLE: DWORD = WS_CHILD | WS_VISIBLE;
             const STYLE_EXTENDED: DWORD = 0;
@@ -54,8 +54,8 @@ impl Window {
                 STYLE,
                 0, /*x*/
                 0, /*y*/
-                Window::default_size().0,
-                Window::default_size().1,
+                window_size.0,
+                window_size.1,
                 parent,
                 null_mut(), /*menu*/
                 GetModuleHandleW(null()),
@@ -428,6 +428,7 @@ struct Gui {
     js_callback: Rc<JavascriptCallback>,
     web_browser: Option<WebBrowser>,
     window: Option<Window>,
+    window_size: Option<(i32, i32)>,
 }
 
 impl PluginGui for Gui {
@@ -447,16 +448,20 @@ impl PluginGui for Gui {
         self.window = None;
     }
 
-    fn open(&mut self, parent_handle: *mut c_void) {
-        let window = Window::new(parent_handle as HWND);
+    fn open(&mut self, parent_handle: *mut c_void) -> bool {
+        let window = Window::new(parent_handle as HWND, self.window_size);
 
-        // TODO: display errors
-        self.web_browser = WebBrowser::new(
+        match WebBrowser::new(
             window.handle,
             self.html_document.clone(),
-            self.js_callback.clone()
-        ).ok();
-        self.window = Some(window);
+            self.js_callback.clone()) {
+            Ok(browser) => {
+                self.window = Some(window);
+                self.web_browser = Some(browser);
+                true
+            },
+            Err(e) => false // TODO: Display errors
+        }
     }
 
     fn is_open(&mut self) -> bool {
@@ -474,7 +479,8 @@ impl PluginGui for Gui {
 
 pub fn new_plugin_gui(
     html_document: String,
-    js_callback: JavascriptCallback) -> Box<PluginGui>
+    js_callback: JavascriptCallback,
+    window_size: Option<(i32, i32)>) -> Box<PluginGui>
 {
     Box::new(
         Gui {
@@ -482,5 +488,6 @@ pub fn new_plugin_gui(
             js_callback: Rc::new(js_callback),
             web_browser: None,
             window: None,
+            window_size: window_size,
         })
 }

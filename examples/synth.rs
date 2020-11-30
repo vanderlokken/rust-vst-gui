@@ -99,7 +99,6 @@ struct ExampleSynth {
     // We access this object both from a UI thread and from an audio processing
     // thread.
     oscillator: Arc<Mutex<Oscillator>>,
-    gui: vst_gui::PluginGui,
 }
 
 impl Default for ExampleSynth {
@@ -116,9 +115,6 @@ impl Default for ExampleSynth {
         ExampleSynth {
             sample_rate: 44100.0,
             oscillator: oscillator.clone(),
-            gui: vst_gui::new_plugin_gui(
-                String::from(HTML),
-                create_javascript_callback(oscillator.clone())),
         }
     }
 }
@@ -168,8 +164,12 @@ impl Plugin for ExampleSynth {
         oscillator.phase = phase(buffer.samples()) % (2.0 * PI);
     }
 
-    fn get_editor(&mut self) -> Option<&mut Editor> {
-        Some(&mut self.gui)
+    fn get_editor(&mut self) -> Option<Box<dyn Editor>> {
+        let gui = vst_gui::new_plugin_gui(
+            String::from(HTML),
+            create_javascript_callback(self.oscillator.clone()),
+            None);
+        Some(Box::new(gui))
     }
 }
 
