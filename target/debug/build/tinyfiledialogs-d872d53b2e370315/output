@@ -1,0 +1,94 @@
+TARGET = Some("x86_64-unknown-linux-gnu")
+OPT_LEVEL = Some("0")
+HOST = Some("x86_64-unknown-linux-gnu")
+CC_x86_64-unknown-linux-gnu = None
+CC_x86_64_unknown_linux_gnu = None
+HOST_CC = None
+CC = None
+CFLAGS_x86_64-unknown-linux-gnu = None
+CFLAGS_x86_64_unknown_linux_gnu = None
+HOST_CFLAGS = None
+CFLAGS = None
+CRATE_CC_NO_DEFAULTS = None
+DEBUG = Some("true")
+CARGO_CFG_TARGET_FEATURE = Some("fxsr,sse,sse2")
+running: "cc" "-O0" "-ffunction-sections" "-fdata-sections" "-fPIC" "-g" "-fno-omit-frame-pointer" "-m64" "-Wall" "-Wextra" "-v" "-o" "/home/adamhanna/apps/rust-vst-gui/target/debug/build/tinyfiledialogs-d872d53b2e370315/out/libtinyfiledialogs/tinyfiledialogs.o" "-c" "libtinyfiledialogs/tinyfiledialogs.c"
+cargo:warning=Using built-in specs.
+cargo:warning=COLLECT_GCC=/usr/bin/cc
+cargo:warning=OFFLOAD_TARGET_NAMES=nvptx-none
+cargo:warning=OFFLOAD_TARGET_DEFAULT=1
+cargo:warning=Target: x86_64-redhat-linux
+cargo:warning=Configured with: ../configure --enable-bootstrap --enable-languages=c,c++,fortran,objc,obj-c++,ada,go,d,lto --prefix=/usr --mandir=/usr/share/man --infodir=/usr/share/info --with-bugurl=http://bugzilla.redhat.com/bugzilla --enable-shared --enable-threads=posix --enable-checking=release --enable-multilib --with-system-zlib --enable-__cxa_atexit --disable-libunwind-exceptions --enable-gnu-unique-object --enable-linker-build-id --with-gcc-major-version-only --with-linker-hash-style=gnu --enable-plugin --enable-initfini-array --with-isl --enable-offload-targets=nvptx-none --without-cuda-driver --enable-gnu-indirect-function --enable-cet --with-tune=generic --with-arch_32=i686 --build=x86_64-redhat-linux
+cargo:warning=Thread model: posix
+cargo:warning=Supported LTO compression algorithms: zlib zstd
+cargo:warning=gcc version 10.1.1 20200507 (Red Hat 10.1.1-1) (GCC) 
+cargo:warning=COLLECT_GCC_OPTIONS='-O0' '-ffunction-sections' '-fdata-sections' '-fPIC' '-g' '-fno-omit-frame-pointer' '-m64' '-Wall' '-Wextra' '-v' '-c' '-o' '/home/adamhanna/apps/rust-vst-gui/target/debug/build/tinyfiledialogs-d872d53b2e370315/out/libtinyfiledialogs/tinyfiledialogs.o' '-mtune=generic' '-march=x86-64'
+cargo:warning= /usr/libexec/gcc/x86_64-redhat-linux/10/cc1 -quiet -v libtinyfiledialogs/tinyfiledialogs.c -quiet -dumpbase tinyfiledialogs.c -m64 -mtune=generic -march=x86-64 -auxbase-strip /home/adamhanna/apps/rust-vst-gui/target/debug/build/tinyfiledialogs-d872d53b2e370315/out/libtinyfiledialogs/tinyfiledialogs.o -g -O0 -Wall -Wextra -version -ffunction-sections -fdata-sections -fPIC -fno-omit-frame-pointer -o /tmp/ccKx93ck.s
+cargo:warning=GNU C17 (GCC) version 10.1.1 20200507 (Red Hat 10.1.1-1) (x86_64-redhat-linux)
+cargo:warning=	compiled by GNU C version 10.1.1 20200507 (Red Hat 10.1.1-1), GMP version 6.1.2, MPFR version 4.0.2-p7, MPC version 1.1.0, isl version isl-0.16.1-GMP
+cargo:warning=
+cargo:warning=GGC heuristics: --param ggc-min-expand=100 --param ggc-min-heapsize=131072
+cargo:warning=ignoring nonexistent directory "/usr/lib/gcc/x86_64-redhat-linux/10/include-fixed"
+cargo:warning=ignoring nonexistent directory "/usr/lib/gcc/x86_64-redhat-linux/10/../../../../x86_64-redhat-linux/include"
+cargo:warning=#include "..." search starts here:
+cargo:warning=#include <...> search starts here:
+cargo:warning= /usr/lib/gcc/x86_64-redhat-linux/10/include
+cargo:warning= /usr/local/include
+cargo:warning= /usr/include
+cargo:warning=End of search list.
+cargo:warning=GNU C17 (GCC) version 10.1.1 20200507 (Red Hat 10.1.1-1) (x86_64-redhat-linux)
+cargo:warning=	compiled by GNU C version 10.1.1 20200507 (Red Hat 10.1.1-1), GMP version 6.1.2, MPFR version 4.0.2-p7, MPC version 1.1.0, isl version isl-0.16.1-GMP
+cargo:warning=
+cargo:warning=GGC heuristics: --param ggc-min-expand=100 --param ggc-min-heapsize=131072
+cargo:warning=Compiler executable checksum: 2a9bc6ce6f3ead0e8f0df26a0d7bce6a
+cargo:warning=libtinyfiledialogs/tinyfiledialogs.c:3311:20: warning: type qualifiers ignored on function return type [-Wignored-qualifiers]
+cargo:warning= 3311 | static int * const getMajorMinorPatch( char const * const aExecutable )
+cargo:warning=      |                    ^~~~~~~~~~~~~~~~~~
+cargo:warning=libtinyfiledialogs/tinyfiledialogs.c: In function ‘sigHandler’:
+cargo:warning=libtinyfiledialogs/tinyfiledialogs.c:4063:28: warning: unused parameter ‘sig’ [-Wunused-parameter]
+cargo:warning= 4063 | static void sigHandler(int sig)
+cargo:warning=      |                        ~~~~^~~
+cargo:warning=libtinyfiledialogs/tinyfiledialogs.c: In function ‘tkinter2Present’:
+cargo:warning=libtinyfiledialogs/tinyfiledialogs.c:4000:51: warning: ‘%s’ directive writing up to 255 bytes into a region of size between 240 and 255 [-Wformat-overflow=]
+cargo:warning= 4000 |                     sprintf( lPythonCommand , "%s %s" , gPython2Name , lPythonParams ) ;
+cargo:warning=      |                                                   ^~                   ~~~~~~~~~~~~~
+cargo:warning=libtinyfiledialogs/tinyfiledialogs.c:4000:21: note: ‘sprintf’ output between 2 and 272 bytes into a destination of size 256
+cargo:warning= 4000 |                     sprintf( lPythonCommand , "%s %s" , gPython2Name , lPythonParams ) ;
+cargo:warning=      |                     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+cargo:warning=libtinyfiledialogs/tinyfiledialogs.c: In function ‘tkinter3Present’:
+cargo:warning=libtinyfiledialogs/tinyfiledialogs.c:4021:55: warning: ‘%s’ directive writing up to 255 bytes into a region of size between 240 and 255 [-Wformat-overflow=]
+cargo:warning= 4021 |                         sprintf( lPythonCommand , "%s %s" , gPython3Name , lPythonParams ) ;
+cargo:warning=      |                                                       ^~                   ~~~~~~~~~~~~~
+cargo:warning=libtinyfiledialogs/tinyfiledialogs.c:4021:25: note: ‘sprintf’ output between 2 and 272 bytes into a destination of size 256
+cargo:warning= 4021 |                         sprintf( lPythonCommand , "%s %s" , gPython3Name , lPythonParams ) ;
+cargo:warning=      |                         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+cargo:warning=libtinyfiledialogs/tinyfiledialogs.c: In function ‘pythonDbusPresent’:
+cargo:warning=libtinyfiledialogs/tinyfiledialogs.c:4045:55: warning: ‘%s’ directive writing up to 255 bytes into a region of size between 240 and 255 [-Wformat-overflow=]
+cargo:warning= 4045 |                         sprintf( lPythonCommand , "%s %s" , gPythonName , lPythonParams ) ;
+cargo:warning=      |                                                       ^~                  ~~~~~~~~~~~~~
+cargo:warning=libtinyfiledialogs/tinyfiledialogs.c:4045:25: note: ‘sprintf’ output between 2 and 272 bytes into a destination of size 256
+cargo:warning= 4045 |                         sprintf( lPythonCommand , "%s %s" , gPythonName , lPythonParams ) ;
+cargo:warning=      |                         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+cargo:warning=libtinyfiledialogs/tinyfiledialogs.c:4052:55: warning: ‘%s’ directive writing up to 255 bytes into a region of size between 240 and 255 [-Wformat-overflow=]
+cargo:warning= 4052 |                         sprintf( lPythonCommand , "%s %s" , gPythonName , lPythonParams ) ;
+cargo:warning=      |                                                       ^~                  ~~~~~~~~~~~~~
+cargo:warning=libtinyfiledialogs/tinyfiledialogs.c:4052:25: note: ‘sprintf’ output between 2 and 272 bytes into a destination of size 256
+cargo:warning= 4052 |                         sprintf( lPythonCommand , "%s %s" , gPythonName , lPythonParams ) ;
+cargo:warning=      |                         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+cargo:warning=COLLECT_GCC_OPTIONS='-O0' '-ffunction-sections' '-fdata-sections' '-fPIC' '-g' '-fno-omit-frame-pointer' '-m64' '-Wall' '-Wextra' '-v' '-c' '-o' '/home/adamhanna/apps/rust-vst-gui/target/debug/build/tinyfiledialogs-d872d53b2e370315/out/libtinyfiledialogs/tinyfiledialogs.o' '-mtune=generic' '-march=x86-64'
+cargo:warning= as -v --64 -o /home/adamhanna/apps/rust-vst-gui/target/debug/build/tinyfiledialogs-d872d53b2e370315/out/libtinyfiledialogs/tinyfiledialogs.o /tmp/ccKx93ck.s
+cargo:warning=GNU assembler version 2.34 (x86_64-redhat-linux) using BFD version version 2.34-2.fc32
+cargo:warning=COMPILER_PATH=/usr/libexec/gcc/x86_64-redhat-linux/10/:/usr/libexec/gcc/x86_64-redhat-linux/10/:/usr/libexec/gcc/x86_64-redhat-linux/:/usr/lib/gcc/x86_64-redhat-linux/10/:/usr/lib/gcc/x86_64-redhat-linux/
+cargo:warning=LIBRARY_PATH=/usr/lib/gcc/x86_64-redhat-linux/10/:/usr/lib/gcc/x86_64-redhat-linux/10/../../../../lib64/:/lib/../lib64/:/usr/lib/../lib64/:/usr/lib/gcc/x86_64-redhat-linux/10/../../../:/lib/:/usr/lib/
+cargo:warning=COLLECT_GCC_OPTIONS='-O0' '-ffunction-sections' '-fdata-sections' '-fPIC' '-g' '-fno-omit-frame-pointer' '-m64' '-Wall' '-Wextra' '-v' '-c' '-o' '/home/adamhanna/apps/rust-vst-gui/target/debug/build/tinyfiledialogs-d872d53b2e370315/out/libtinyfiledialogs/tinyfiledialogs.o' '-mtune=generic' '-march=x86-64'
+exit code: 0
+AR_x86_64-unknown-linux-gnu = None
+AR_x86_64_unknown_linux_gnu = None
+HOST_AR = None
+AR = None
+running: "ar" "cq" "/home/adamhanna/apps/rust-vst-gui/target/debug/build/tinyfiledialogs-d872d53b2e370315/out/libtinyfiledialogs.a" "/home/adamhanna/apps/rust-vst-gui/target/debug/build/tinyfiledialogs-d872d53b2e370315/out/libtinyfiledialogs/tinyfiledialogs.o"
+exit code: 0
+running: "ar" "s" "/home/adamhanna/apps/rust-vst-gui/target/debug/build/tinyfiledialogs-d872d53b2e370315/out/libtinyfiledialogs.a"
+exit code: 0
+cargo:rustc-link-lib=static=tinyfiledialogs
+cargo:rustc-link-search=native=/home/adamhanna/apps/rust-vst-gui/target/debug/build/tinyfiledialogs-d872d53b2e370315/out

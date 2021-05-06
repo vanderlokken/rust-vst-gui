@@ -5,9 +5,12 @@ extern crate memoffset;
 #[macro_use]
 extern crate winapi;
 extern crate vst;
+extern crate web_view;
 
 use std::error::Error;
 use std::os::raw::c_void;
+
+use web_view::*;
 
 #[cfg(windows)]
 mod win32;
@@ -54,6 +57,18 @@ impl vst::editor::Editor for PluginGui {
     }
 
     fn open(&mut self, parent_handle: *mut c_void) -> bool {
+        let html_content = "<html><body><h1>Hello, World!</h1></body></html>";
+        web_view::builder()
+            .title("This is a test")
+            .content(Content::Html(html_content))
+            .size(320, 480)
+            .resizable(false)
+            .debug(true)
+            .user_data(())
+            .invoke_handler(|_webview, _arg| Ok(()))
+            .run()
+            .unwrap();
+
         self.gui.open(parent_handle)
     }
 
