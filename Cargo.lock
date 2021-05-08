@@ -178,15 +178,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "memoffset"
-version = "0.6.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f83fb6581e8ed1f85fd45c116db8405483899489e38406156c25eb743554361d"
-dependencies = [
- "autocfg",
-]
-
-[[package]]
 name = "num-traits"
 version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -376,7 +367,6 @@ dependencies = [
 name = "vst-gui"
 version = "0.2.0"
 dependencies = [
- "memoffset",
  "vst",
  "web-view",
  "winapi",

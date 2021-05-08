@@ -10,9 +10,6 @@ keywords = ["gui", "plugin", "vst", "vst2"]
 vst = "^0.2"
 web-view = { version = "0.7", features = ["edge"] }
 
-[target.'cfg(windows)'.dependencies]
-memoffset = "0.6.1"
-
 [target.'cfg(windows)'.dependencies.winapi]
 version = "0.3.9"
 features = [
